@@ -60,6 +60,8 @@ std::string Args::lossToString(loss_name ln) const {
       return "ns";
     case loss_name::softmax:
       return "softmax";
+    case loss_name::softmax_distil:
+      return "softmax_distil";
     case loss_name::ova:
       return "one-vs-all";
   }
@@ -82,6 +84,8 @@ std::string Args::modelToString(model_name mn) const {
       return "sg";
     case model_name::sup:
       return "sup";
+    case model_name::sup_distil:
+      return "sup_distil";
   }
   return "Unknown model name!"; // should never happen
 }
@@ -101,6 +105,13 @@ void Args::parseArgs(const std::vector<std::string>& args) {
   if (command == "supervised") {
     model = model_name::sup;
     loss = loss_name::softmax;
+    minCount = 1;
+    minn = 0;
+    maxn = 0;
+    lr = 0.1;
+  } else if (command == "supervised_distillation") {
+    model = model_name::sup_distil;
+    loss = loss_name::softmax_distil;
     minCount = 1;
     minn = 0;
     maxn = 0;

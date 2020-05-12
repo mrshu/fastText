@@ -68,6 +68,14 @@ class Model {
       int32_t targetIndex,
       real lr,
       State& state);
+  void update(
+      const std::vector<int32_t>& input,
+      const std::vector<int32_t>& targets,
+      int32_t targetIndex,
+      real lr,
+      State& state,
+      const std::vector<real>& probas);
+
   void computeHidden(const std::vector<int32_t>& input, State& state) const;
 
   real std_log(real) const;

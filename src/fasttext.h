@@ -72,6 +72,12 @@ class FastText {
       real lr,
       const std::vector<int32_t>& line,
       const std::vector<int32_t>& labels);
+  void supervised_distillation(
+      Model::State& state,
+      real lr,
+      const std::vector<int32_t>& line,
+      const std::vector<int32_t>& labels,
+      const std::vector<real>& probas);
   void cbow(Model::State& state, real lr, const std::vector<int32_t>& line);
   void skipgram(Model::State& state, real lr, const std::vector<int32_t>& line);
   std::vector<int32_t> selectEmbeddings(int32_t cutoff) const;

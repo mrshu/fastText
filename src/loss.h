@@ -46,6 +46,14 @@ class Loss {
       Model::State& state,
       real lr,
       bool backprop) = 0;
+  virtual real forward_distill(
+      const std::vector<int32_t>& targets,
+      int32_t targetIndex,
+      Model::State& state,
+      real lr,
+      bool backprop,
+      const std::vector<real>& probas) = 0;
+
   virtual void computeOutput(Model::State& state) const = 0;
 
   virtual void predict(
@@ -80,6 +88,13 @@ class OneVsAllLoss : public BinaryLogisticLoss {
       Model::State& state,
       real lr,
       bool backprop) override;
+  real forward_distill(
+    const std::vector<int32_t>& targets,
+    int32_t /* we take all targets here */,
+    Model::State& state,
+    real lr,
+    bool backprop,
+    const std::vector<real>& probas) override;
 };
 
 class NegativeSamplingLoss : public BinaryLogisticLoss {
@@ -104,6 +119,14 @@ class NegativeSamplingLoss : public BinaryLogisticLoss {
       Model::State& state,
       real lr,
       bool backprop) override;
+
+  real forward_distill(
+    const std::vector<int32_t>& targets,
+    int32_t /* we take all targets here */,
+    Model::State& state,
+    real lr,
+    bool backprop,
+    const std::vector<real>& probas) override;
 };
 
 class HierarchicalSoftmaxLoss : public BinaryLogisticLoss {
@@ -140,6 +163,15 @@ class HierarchicalSoftmaxLoss : public BinaryLogisticLoss {
       Model::State& state,
       real lr,
       bool backprop) override;
+
+  real forward_distill(
+    const std::vector<int32_t>& targets,
+    int32_t /* we take all targets here */,
+    Model::State& state,
+    real lr,
+    bool backprop,
+    const std::vector<real>& probas) override;
+
   void predict(
       int32_t k,
       real threshold,
@@ -157,6 +189,35 @@ class SoftmaxLoss : public Loss {
       Model::State& state,
       real lr,
       bool backprop) override;
+
+  real forward_distill(
+    const std::vector<int32_t>& targets,
+    int32_t /* we take all targets here */,
+    Model::State& state,
+    real lr,
+    bool backprop,
+    const std::vector<real>& probas) override;
+
+  void computeOutput(Model::State& state) const override;
+};
+
+class SoftmaxDistillationLoss: public Loss {
+ public:
+  explicit SoftmaxDistillationLoss(std::shared_ptr<Matrix>& wo);
+  ~SoftmaxDistillationLoss() noexcept override = default;
+  real forward(
+      const std::vector<int32_t>& targets,
+      int32_t targetIndex,
+      Model::State& state,
+      real lr,
+      bool backprop) override;
+  real forward_distill(
+      const std::vector<int32_t>& targets,
+      int32_t targetIndex,
+      Model::State& state,
+      real lr,
+      bool backprop,
+      const std::vector<real>& probas) override;
   void computeOutput(Model::State& state) const override;
 };
 

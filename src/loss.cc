@@ -92,6 +92,19 @@ void Loss::findKBest(
   }
 }
 
+real Loss::forward_distill(
+    const std::vector<int32_t>& targets,
+    int32_t /* we take all targets here */,
+    Model::State& state,
+    real lr,
+    bool backprop,
+    const std::vector<real>& probas) {
+
+  return 0;
+}
+
+
+
 BinaryLogisticLoss::BinaryLogisticLoss(std::shared_ptr<Matrix>& wo)
     : Loss(wo) {}
 
@@ -142,6 +155,19 @@ real OneVsAllLoss::forward(
   return loss;
 }
 
+real OneVsAllLoss::forward_distill(
+    const std::vector<int32_t>& targets,
+    int32_t /* we take all targets here */,
+    Model::State& state,
+    real lr,
+    bool backprop,
+    const std::vector<real>& probas) {
+
+  return 0;
+}
+
+
+
 NegativeSamplingLoss::NegativeSamplingLoss(
     std::shared_ptr<Matrix>& wo,
     int neg,
@@ -177,6 +203,17 @@ real NegativeSamplingLoss::forward(
     loss += binaryLogistic(negativeTarget, state, false, lr, backprop);
   }
   return loss;
+}
+
+real NegativeSamplingLoss::forward_distill(
+    const std::vector<int32_t>& targets,
+    int32_t /* we take all targets here */,
+    Model::State& state,
+    real lr,
+    bool backprop,
+    const std::vector<real>& probas) {
+
+  return 0;
 }
 
 int32_t NegativeSamplingLoss::getNegative(
@@ -258,6 +295,17 @@ real HierarchicalSoftmaxLoss::forward(
     loss += binaryLogistic(pathToRoot[i], state, binaryCode[i], lr, backprop);
   }
   return loss;
+}
+
+real HierarchicalSoftmaxLoss::forward_distill(
+    const std::vector<int32_t>& targets,
+    int32_t /* we take all targets here */,
+    Model::State& state,
+    real lr,
+    bool backprop,
+    const std::vector<real>& probas) {
+
+  return 0;
 }
 
 void HierarchicalSoftmaxLoss::predict(
@@ -342,5 +390,98 @@ real SoftmaxLoss::forward(
   }
   return -log(state.output[target]);
 };
+
+real SoftmaxLoss::forward_distill(
+    const std::vector<int32_t>& targets,
+    int32_t /* we take all targets here */,
+    Model::State& state,
+    real lr,
+    bool backprop,
+    const std::vector<real>& probas) {
+
+  return 0;
+}
+
+
+SoftmaxDistillationLoss::SoftmaxDistillationLoss(std::shared_ptr<Matrix>& wo) : Loss(wo) {}
+
+void SoftmaxDistillationLoss::computeOutput(Model::State& state) const {
+  Vector& output = state.output;
+  output.mul(*wo_, state.hidden);
+  real max = output[0], z = 0.0;
+  int32_t osz = output.size();
+  for (int32_t i = 0; i < osz; i++) {
+    max = std::max(output[i], max);
+  }
+  for (int32_t i = 0; i < osz; i++) {
+    output[i] = exp(output[i] - max);
+    z += output[i];
+  }
+  for (int32_t i = 0; i < osz; i++) {
+    output[i] /= z;
+  }
+}
+
+real SoftmaxDistillationLoss::forward(
+    const std::vector<int32_t>& targets,
+    int32_t targetIndex,
+    Model::State& state,
+    real lr,
+    bool backprop) {
+  computeOutput(state);
+
+  assert(targetIndex >= 0);
+  assert(targetIndex < targets.size());
+  int32_t target = targets[targetIndex];
+
+  if (backprop) {
+    int32_t osz = wo_->size(0);
+    for (int32_t i = 0; i < osz; i++) {
+      real label = (i == target) ? 1.0 : 0.0;
+      real alpha = lr * (label - state.output[i]);
+      state.grad.addRow(*wo_, i, alpha);
+      wo_->addVectorToRow(state.hidden, i, alpha);
+    }
+  }
+  return -log(state.output[target]);
+};
+
+real SoftmaxDistillationLoss::forward_distill(
+    const std::vector<int32_t>& targets,
+    int32_t targetIndex,
+    Model::State& state,
+    real lr,
+    bool backprop,
+    const std::vector<real>& probas) {
+  computeOutput(state);
+
+  assert(targetIndex >= 0);
+  assert(targetIndex < targets.size());
+  int32_t target = targets[targetIndex];
+
+  real a = 0.9;
+  real loss = -log(state.output[target]) * a;
+
+  if (backprop) {
+    int32_t osz = wo_->size(0);
+    for (int32_t i = 0; i < osz; i++) {
+      real label = (i == target) ? 1.0 : 0.0;
+      real alpha = a * lr * (label - state.output[i]);
+      state.grad.addRow(*wo_, i, alpha);
+      wo_->addVectorToRow(state.hidden, i, alpha);
+    }
+
+    for (int32_t i = 0; i < osz; i++) {
+      real label = probas[i];
+      real alpha = (1.0 - a) * lr * (label - state.output[i]);
+      state.grad.addRow(*wo_, i, alpha);
+      wo_->addVectorToRow(state.hidden, i, alpha);
+      loss -= log(state.output[i]) * (1 - a);
+    }
+  }
+  return loss;
+};
+
+
 
 } // namespace fasttext

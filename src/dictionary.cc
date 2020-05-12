@@ -56,13 +56,21 @@ int32_t Dictionary::find(const std::string& w, uint32_t h) const {
 }
 
 void Dictionary::add(const std::string& w) {
-  int32_t h = find(w);
+  size_t d = w.find(":");
+  std::string s;
+  if(d != std::string::npos && w.find("__label__") != std::string::npos) {
+    s = w.substr(0, d);
+  } else {
+    s = w;
+  }
+
+  int32_t h = find(s);
   ntokens_++;
   if (word2int_[h] == -1) {
     entry e;
-    e.word = w;
+    e.word = s;
     e.count = 1;
-    e.type = getType(w);
+    e.type = getType(s);
     words_.push_back(e);
     word2int_[h] = size_++;
   } else {
@@ -402,6 +410,57 @@ int32_t Dictionary::getLine(
       break;
     }
   }
+  addWordNgrams(words, word_hashes, args_->wordNgrams);
+  return ntokens;
+}
+
+int32_t Dictionary::getLine(
+    std::istream& in,
+    std::vector<int32_t>& words,
+    std::vector<int32_t>& labels,
+    std::vector<real>& probas) const {
+  std::vector<int32_t> word_hashes;
+  std::string token;
+  int32_t ntokens = 0;
+
+  std::string proba_delim = ":";
+
+  reset(in);
+  words.clear();
+  labels.clear();
+  probas.clear();
+  while (readWord(in, token)) {
+    // find the delimiter
+    size_t delim_index = token.find(proba_delim);
+    if (delim_index != std::string::npos) {
+      // extract the probability part
+      std::string proba_str = token.substr(
+        delim_index + proba_delim.length(),
+        token.length()
+      );
+      // convert the probability string to float
+      float proba = ::atof(proba_str.c_str());
+      // clear the probability part from the token
+      token.erase(delim_index, token.length());
+      probas.push_back(proba);
+    }
+
+    uint32_t h = hash(token);
+    int32_t wid = getId(token, h);
+    entry_type type = wid < 0 ? getType(token) : getType(wid);
+
+    ntokens++;
+    if (type == entry_type::word) {
+      addSubwords(words, token, wid);
+      word_hashes.push_back(h);
+    } else if (type == entry_type::label && wid >= 0) {
+      labels.push_back(wid - nwords_);
+    }
+    if (token == EOS) {
+      break;
+    }
+  }
+
   addWordNgrams(words, word_hashes, args_->wordNgrams);
   return ntokens;
 }

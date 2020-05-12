@@ -40,6 +40,8 @@ std::shared_ptr<Loss> FastText::createLoss(std::shared_ptr<Matrix>& output) {
           output, args_->neg, getTargetCounts());
     case loss_name::softmax:
       return std::make_shared<SoftmaxLoss>(output);
+    case loss_name::softmax_distil:
+      return std::make_shared<SoftmaxDistillationLoss>(output);
     case loss_name::ova:
       return std::make_shared<OneVsAllLoss>(output);
     default:
@@ -376,6 +378,24 @@ void FastText::supervised(
   }
 }
 
+void FastText::supervised_distillation(
+    Model::State& state,
+    real lr,
+    const std::vector<int32_t>& line,
+    const std::vector<int32_t>& labels,
+    const std::vector<real>& probas) {
+  if (labels.size() == 0 || line.size() == 0) {
+    return;
+  }
+
+  // argmax over probabilities
+  std::vector<real>::const_iterator r;
+  r = std::max_element(probas.begin(), probas.end());
+
+  int32_t i = std::distance(probas.begin(), r);
+  model_->update(line, labels, i, lr, state, probas);
+}
+
 void FastText::cbow(
     Model::State& state,
     real lr,
@@ -451,7 +471,7 @@ void FastText::predict(
     return;
   }
   Model::State state(args_->dim, dict_->nlabels(), 0);
-  if (args_->model != model_name::sup) {
+  if (args_->model != model_name::sup && args_->model != model_name::sup_distil) {
     throw std::invalid_argument("Model needs to be supervised for prediction!");
   }
   model_->predict(words, k, threshold, predictions, state);
@@ -630,6 +650,7 @@ void FastText::trainThread(int32_t threadId, const TrainCallback& callback) {
   const int64_t ntokens = dict_->ntokens();
   int64_t localTokenCount = 0;
   std::vector<int32_t> line, labels;
+  std::vector<real> probas;
   uint64_t callbackCounter = 0;
   try {
     while (keepTraining(ntokens)) {
@@ -646,6 +667,9 @@ void FastText::trainThread(int32_t threadId, const TrainCallback& callback) {
       if (args_->model == model_name::sup) {
         localTokenCount += dict_->getLine(ifs, line, labels);
         supervised(state, lr, line, labels);
+      } else if (args_->model == model_name::sup_distil) {
+        localTokenCount += dict_->getLine(ifs, line, labels, probas);
+        supervised_distillation(state, lr, line, labels, probas);
       } else if (args_->model == model_name::cbow) {
         localTokenCount += dict_->getLine(ifs, line, state.rng);
         cbow(state, lr, line);
@@ -724,7 +748,7 @@ std::shared_ptr<Matrix> FastText::createRandomMatrix() const {
 
 std::shared_ptr<Matrix> FastText::createTrainOutputMatrix() const {
   int64_t m =
-      (args_->model == model_name::sup) ? dict_->nlabels() : dict_->nwords();
+      (args_->model == model_name::sup || args_->model == model_name::sup_distil) ? dict_->nlabels() : dict_->nwords();
   std::shared_ptr<DenseMatrix> output =
       std::make_shared<DenseMatrix>(m, args_->dim);
   output->zero();
